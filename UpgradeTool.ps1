@@ -72,6 +72,28 @@ $RunButton.Add_Click({
     Write-Log "=== Windows 11 Upgrade Automation ==="
 
     try {
+        # --- Check PortableOperatingSystem Registry Key ---
+        Write-Log "Checking PortableOperatingSystem registry key..."
+        $regPath = "HKLM:\System\CurrentControlSet\Control"
+        $regKey = "PortableOperatingSystem"
+        
+        try {
+            $regValue = Get-ItemProperty -Path $regPath -Name $regKey -ErrorAction SilentlyContinue
+            if ($regValue) {
+                if ($regValue.$regKey -ne 0) {
+                    Write-Log "PortableOperatingSystem is set to $($regValue.$regKey). Setting to 0..."
+                    Set-ItemProperty -Path $regPath -Name $regKey -Value 0
+                    Write-Log "PortableOperatingSystem has been set to 0."
+                } else {
+                    Write-Log "PortableOperatingSystem is already set to 0."
+                }
+            } else {
+                Write-Log "PortableOperatingSystem registry key does not exist. Skipping..."
+            }
+        } catch {
+            Write-Log "Warning: Could not access registry: $($_.Exception.Message)"
+        }
+
         # --- Detect Boot Disk ---
         $disk = Get-Disk | Where-Object { $_.IsBoot -eq $true }
         if (-not $disk) { throw "No boot disk detected!" }
@@ -129,15 +151,21 @@ $RunButton.Add_Click({
         $isoDest = "$osDrive`:\$isoName"
 
         Write-Log "Selected ISO: $isoName"
-        Write-Log "Copying ISO to $isoDest ..."
 
-        # --- Capture verbose copy output ---
-        $verboseOutput = Copy-Item $isoSource $isoDest -Force -Verbose 4>&1
-        foreach ($line in $verboseOutput) {
-            Write-Log $line
+        # --- Check if ISO is already on OS drive ---
+        if ($isoSource -eq $isoDest) {
+            Write-Log "ISO is already on $osDrive`:\. Skipping copy."
+        } else {
+            Write-Log "Copying ISO to $isoDest ..."
+
+            # --- Capture verbose copy output ---
+            $verboseOutput = Copy-Item $isoSource $isoDest -Force -Verbose 4>&1
+            foreach ($line in $verboseOutput) {
+                Write-Log $line
+            }
+
+            Write-Log "Copy complete."
         }
-
-        Write-Log "Copy complete."
 
         # --- Mount ISO ---
         Write-Log "Mounting ISO..."
